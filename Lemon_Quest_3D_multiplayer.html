@@ -245,6 +245,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-of
     <h3>🔊 Audio</h3>
     <label class="setting-toggle mut small"><input type="checkbox" id="sfxOn"> Sound effects (attacks, hits, skills)</label>
     <label class="setting-toggle mut small"><input type="checkbox" id="voiceOn"> Voice effects (battle shouts)</label>
+    <label class="mut small">🗾 Voice language <select id="voiceLang" style="width:100%;margin-top:3px;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px"><option value="en">English</option><option value="ja">日本語 (Japanese)</option></select></label>
+    <div class="mut small" id="voiceLangNote"></div>
     <label class="mut small">Volume <input type="range" id="volR" min="0" max="100" step="5" style="padding:0"></label>
     <button id="m1">▶ Resume</button><button id="m2">🔄 Change class (reset)</button><button id="m3">🚪 Logout</button>
     <label class="mut small">📂 Custom VRM model (optional)<input type="file" id="vf" accept=".vrm,.glb"></label>
@@ -7246,7 +7248,7 @@ $('bV').onclick=()=>{if(!ui)boatAct()};$('bX').onclick=()=>{if(!ui)fishAct()};$(
 (function(){
 'use strict';
 const KEY='lq_audio';
-const cfg={sfx:true,voice:true,vol:.7};
+const cfg={sfx:true,voice:true,vol:.7,lang:'en'};
 try{Object.assign(cfg,JSON.parse(S.get(KEY)||'{}'))}catch(e){}
 const persist=()=>S.set(KEY,JSON.stringify(cfg));
 let ctx=null,master=null,nbuf=null;
@@ -7341,14 +7343,25 @@ const ATK_LINES={warrior:['Hyah!','Haaa!','Take this!','Yah!'],mage:['Hah!','Beg
 const HURT_LINES=['Ugh!','Argh!','Oof!','Agh!'];
 let voices=[];
 if('speechSynthesis' in window){const lv=()=>{voices=speechSynthesis.getVoices()};lv();speechSynthesis.onvoiceschanged=lv}
+/* Japanese voice option */
+const JA_LINES={'Hyah!':'はぁっ！','Haaa!':'はぁぁっ！','Take this!':'くらえっ！','Yah!':'せいっ！','Hah!':'はっ！','Begone!':'消えろっ！','Ha!':'はっ！',
+'Hup!':'ふっ！','Got you!':'捕らえた！','Hiya!':'やぁっ！','Too slow!':'遅いっ！','Be gone!':'去りなさい！','Ya!':'やっ！',
+'Ugh!':'うっ！','Argh!':'ぐあっ！','Oof!':'ぐっ！','Agh!':'あぐっ！','Haaaah!':'はぁぁぁっ！','Hyaaa!':'やぁぁぁっ！','Aaargh...':'うわぁぁ…','Level up!':'レベルアップ！','Ready for battle!':'いくぞ！戦闘開始だ！',
+'Shockwave':'ショックウェーブ！','Frost Nova':'フロストノヴァ！','Triple Shot':'トリプルショット！','Shadow Dash':'シャドウダッシュ！','Divine Heal':'ディバインヒール！',
+'Battle Cry':'バトルクライ！','Leap Slam':'リープスラム！','Iron Skin':'アイアンスキン！','Fireball':'ファイアボール！','Arcane Barrage':'アーケインバラージ！','Mana Surge':'マナサージ！',
+'Piercing Shot':'ピアシングショット！','Arrow Rain':'アローレイン！','Evasive Roll':'イベイシブロール！','Smoke Bomb':'スモークボム！','Blade Flurry':'ブレードフラリー！','Blade Burst':'ブレードバースト！',
+'Smite':'スマイト！','Blessing':'ブレッシング！','Holy Nova':'ホーリーノヴァ！'};
+const jaVoices=()=>voices.filter(x=>/^ja([-_]|$)/i.test(x.lang));
+function pickJa(){const l=jaVoices();return l.find(x=>/google|natural|nanami|haruka|kyoko|o-ren|enhanced|premium/i.test(x.name))||l[0]}
 function say(text,o){
   o=o||{};
   if(!cfg.voice||!('speechSynthesis' in window))return;
   if(!o.force&&speechSynthesis.speaking)return;
   const cls=(typeof P!=='undefined'&&P&&P.cls)||'warrior',vp=VP[cls]||{p:1,r:1};
-  const u=new SpeechSynthesisUtterance(text);u.lang='en-US';
+  const ja=cfg.lang==='ja';if(ja)text=JA_LINES[text]||(text.endsWith('!')&&JA_LINES[text.slice(0,-1)])||text;
+  const u=new SpeechSynthesisUtterance(text);u.lang=ja?'ja-JP':'en-US';
   u.pitch=Math.max(0,Math.min(2,vp.p*(o.pitch||1)));u.rate=Math.max(.5,Math.min(2,vp.r*(o.rate||1)));u.volume=Math.min(1,cfg.vol*1.25);
-  const v=voices.find(x=>/en[-_]US/i.test(x.lang)&&/google|natural|enhanced/i.test(x.name))||voices.find(x=>/^en/i.test(x.lang));
+  const v=ja?pickJa():(voices.find(x=>/en[-_]US/i.test(x.lang)&&/google|natural|enhanced/i.test(x.name))||voices.find(x=>/^en/i.test(x.lang)));
   if(v)u.voice=v;
   if(o.force)speechSynthesis.cancel();
   speechSynthesis.speak(u);
@@ -7398,6 +7411,11 @@ if(sfxOn){
   sfxOn.checked=cfg.sfx;voiceOn.checked=cfg.voice;volR.value=Math.round(cfg.vol*100);
   sfxOn.onchange=()=>{cfg.sfx=sfxOn.checked;persist();if(cfg.sfx)SF.swish(false,1)};
   voiceOn.onchange=()=>{cfg.voice=voiceOn.checked;persist();if(cfg.voice)say('Ready for battle!',{force:true});else if('speechSynthesis' in window)speechSynthesis.cancel()};
+  const vl=document.getElementById('voiceLang'),vn=document.getElementById('voiceLangNote');
+  const jaNote=()=>{vn.textContent=cfg.lang==='ja'&&!jaVoices().length?'⚠ No Japanese voice found on this device. Install one in your system settings (Windows: Settings › Time & language › Speech; iOS/Android: Settings › Accessibility › Spoken content / Text-to-speech).':''};
+  vl.value=cfg.lang==='ja'?'ja':'en';jaNote();
+  if('speechSynthesis' in window){const prev=speechSynthesis.onvoiceschanged;speechSynthesis.onvoiceschanged=()=>{if(prev)prev();jaNote()}}
+  vl.onchange=()=>{cfg.lang=vl.value;persist();jaNote();if(!cfg.voice){cfg.voice=true;voiceOn.checked=true;persist()}say('Ready for battle!',{force:true})};
   volR.oninput=()=>{cfg.vol=volR.value/100;persist();if(master)master.gain.value=cfg.vol};
   volR.onchange=()=>{if(cfg.sfx)SF.hit(false)};
 }
